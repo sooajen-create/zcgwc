@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f0e9">
+  <title>拾物 Shelf — 个人购物收藏</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="拾物 Shelf 首页">
+        <span class="brand-mark">S</span>
+        <span><strong>拾物 Shelf</strong><small>PERSONAL SHOPPING LIBRARY</small></span>
+      </a>
+      <button id="nav-all" class="nav-item active"><span>▦</span> 所有收藏 <b id="all-count">0</b></button>
+      <button id="nav-inbox" class="nav-item"><span>↳</span> 待整理收件箱 <b id="inbox-count">0</b></button>
+      <div class="side-heading">我的合集 <button id="add-folder" class="icon-button" title="新建合集">＋</button></div>
+      <div id="folder-list" class="folder-list"></div>
+      <div class="sidebar-bottom">
+        <div id="connection-status" class="status-pill"><i></i><span>本机模式</span></div>
+        <button id="settings-open" class="settings-button">⚙ 设置与云端同步</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">S</span><strong>拾物 Shelf</strong></div>
+        <div class="topbar-spacer"></div>
+        <button id="cart-open" class="cart-button">♡ <span>购物清单</span><b id="cart-count">0</b></button>
+        <button id="settings-open-top" class="avatar" title="设置">E</button>
+      </header>
+
+      <section class="welcome">
+        <div class="eyebrow">SAVE IT BEFORE YOU FORGET IT</div>
+        <h1>把心动好物，<em>好好收藏。</em></h1>
+        <p>一次粘贴多个商品链接，慢慢整理成自己的购物灵感库。</p>
+      </section>
+
+      <section class="import-card">
+        <div class="import-title"><div><span class="step-dot">01</span><strong>添加商品链接</strong></div><span class="muted">每行一个链接，可批量导入</span></div>
+        <textarea id="url-input" rows="3" placeholder="粘贴商品链接，一行一个&#10;https://example.com/product-a&#10;https://example.com/product-b"></textarea>
+        <div class="import-actions">
+          <label class="select-label">放入合集
+            <select id="import-folder"><option value="">自动分类 / 待整理</option></select>
+          </label>
+          <div class="action-right"><span id="import-hint" class="muted small">自动分类会根据网址和标题给出建议</span><button id="import-button" class="primary-button">＋ 导入链接</button></div>
+        </div>
+      </section>
+
+      <section class="toolbar">
+        <div><h2 id="view-title">所有收藏</h2><p id="view-subtitle">你的私人购物灵感库</p></div>
+        <div class="toolbar-actions">
+          <label class="searchbox"><span>⌕</span><input id="search-input" placeholder="搜索商品、店家、备注"></label>
+          <select id="sort-select" aria-label="排序"><option value="newest">最近添加</option><option value="price-low">价格从低到高</option><option value="price-high">价格从高到低</option><option value="name">商品名称</option></select>
+        </div>
+      </section>
+
+      <section id="product-grid" class="product-grid"></section>
+      <section id="empty-state" class="empty-state hidden">
+        <div class="empty-illustration">✳</div><h3>这里还空空的</h3><p>把你喜欢的商品链接粘贴到上方，开始建立自己的收藏库吧。</p>
+      </section>
+      <footer class="footer-note">你的收藏值得被认真整理。<span>拾物 Shelf · 个人使用</span></footer>
+    </main>
+  </div>
+
+  <dialog id="product-dialog" class="dialog">
+    <form id="product-form" method="dialog">
+      <div class="dialog-head"><div><div class="eyebrow">PRODUCT DETAILS</div><h2 id="product-dialog-title">编辑商品</h2></div><button type="button" class="icon-button" data-close="product-dialog">×</button></div>
+      <input type="hidden" id="product-id">
+      <div class="form-grid">
+        <label class="field full">商品名称<input id="p-title" required maxlength="180" placeholder="商品名称"></label>
+        <label class="field">价格<input id="p-price" type="number" min="0" step="0.01" placeholder="例如 29.90"></label>
+        <label class="field">货币<select id="p-currency"><option>EUR</option><option>CNY</option><option>USD</option><option>GBP</option><option>JPY</option><option>KRW</option><option>Other</option></select></label>
+        <label class="field">店家 / 品牌<input id="p-store" maxlength="120" placeholder="店铺或品牌"></label>
+        <label class="field">分类<select id="p-folder"></select></label>
+        <label class="field full">商品链接<input id="p-url" type="url" required placeholder="https://..."></label>
+        <label class="field full">图片网址<input id="p-image" type="url" placeholder="商品图片链接（可选）"></label>
+        <label class="field">我的评分<select id="p-rating"><option value="">暂不评分</option><option value="1">★☆☆☆☆</option><option value="2">★★☆☆☆</option><option value="3">★★★☆☆</option><option value="4">★★★★☆</option><option value="5">★★★★★</option></select></label>
+        <label class="field">购买状态<select id="p-status"><option value="considering">考虑中</option><option value="want">很想买</option><option value="purchased">已购买</option><option value="passed">已放弃</option></select></label>
+        <label class="field full">商品评价 / 网络风评摘要<textarea id="p-review" rows="3" placeholder="可记录你看到的评价、优缺点或常见差评"></textarea></label>
+        <label class="field full">个人备注<textarea id="p-notes" rows="2" placeholder="尺码、颜色、折扣、送礼想法……"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button type="button" id="delete-product" class="danger-button">删除商品</button><span class="grow"></span><button type="button" class="secondary-button" data-close="product-dialog">取消</button><button type="submit" class="primary-button">保存修改</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="folder-dialog" class="dialog narrow">
+    <form id="folder-form" method="dialog">
+      <div class="dialog-head"><h2 id="folder-dialog-title">新建合集</h2><button type="button" class="icon-button" data-close="folder-dialog">×</button></div>
+      <input type="hidden" id="folder-id">
+      <label class="field">合集名称<input id="folder-name" required maxlength="60" placeholder="例如：秋冬穿搭"></label>
+      <label class="field">合集描述<input id="folder-description" maxlength="120" placeholder="可选"></label>
+      <div class="dialog-actions"><button type="button" id="delete-folder" class="danger-button">删除合集</button><span class="grow"></span><button type="button" class="secondary-button" data-close="folder-dialog">取消</button><button type="submit" class="primary-button">保存合集</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settings-dialog" class="dialog narrow">
+    <form id="settings-form" method="dialog">
+      <div class="dialog-head"><div><div class="eyebrow">SETTINGS</div><h2>设置与云端同步</h2></div><button type="button" class="icon-button" data-close="settings-dialog">×</button></div>
+      <p class="muted">默认使用当前浏览器保存。连接 Supabase 后，可登录并在多台设备同步数据。</p>
+      <label class="field">Supabase Project URL<input id="supabase-url" type="url" placeholder="https://xxxx.supabase.co"></label>
+      <label class="field">Supabase anon / publishable key<input id="supabase-key" type="password" placeholder="公开客户端密钥，不是 service_role"></label>
+      <label class="field">你的管理员邮箱<input id="admin-email" type="email" placeholder="创建 Supabase Auth 用户时使用的邮箱"></label>
+      <div class="settings-actions"><button type="button" id="connect-cloud" class="primary-button">连接云端</button><button type="button" id="sign-in" class="secondary-button">发送登录链接</button><button type="button" id="sign-out" class="secondary-button">退出登录</button></div>
+      <div id="cloud-message" class="notice">尚未连接云端。当前数据保存在此浏览器。</div>
+      <div class="divider"></div>
+      <h3>数据备份</h3><p class="muted small">建议定期导出备份。导出文件包含商品、合集和备注。</p>
+      <div class="settings-actions"><button type="button" id="export-data" class="secondary-button">导出 JSON 备份</button><label class="secondary-button file-button">导入 JSON 备份<input type="file" id="import-file" accept="application/json"></label></div>
+      <div class="dialog-actions"><span class="grow"></span><button type="button" class="secondary-button" data-close="settings-dialog">关闭</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
