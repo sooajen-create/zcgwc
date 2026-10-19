@@ -145,20 +145,45 @@
     supabase.auth.getSession().then(({data})=>{session=data.session;if(session){setCloudStatus("正在读取云端…",true);loadCloud()}else setCloudStatus("已连接，请登录以同步",false)});
     supabase.auth.onAuthStateChange((_event,s)=>{session=s;if(s){setCloudStatus("已登录，正在同步…",true);loadCloud()}else setCloudStatus("已连接，尚未登录",false)});
   }
+  // 商品识别服务独立于 Supabase 同步，可单独配置。
+  const EXTRACTOR_KEY="shop-shelf-extractor-v1";
+  $("#extractor-url").value=localStorage.getItem(EXTRACTOR_KEY)||"";
+  $("#save-extractor").addEventListener("click",()=>{
+    const raw=$("#extractor-url").value.trim().replace(/\/+$/,"");
+    if(raw&&!validUrl(raw)){toast("请填写有效的 https 后端地址");return;}
+    localStorage.setItem(EXTRACTOR_KEY,raw);toast(raw?"商品识别服务地址已保存":"已清除商品识别服务地址");
+  });
+  async function extractProduct(url){
+    const base=localStorage.getItem(EXTRACTOR_KEY)||"";
+    if(!base) return {ok:false,error:"尚未配置商品识别后端"};
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),18000);
+    try{
+      const res=await fetch(base+"/api/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url}),signal:controller.signal});
+      const result=await res.json();return result;
+    }catch(e){return {ok:false,error:e.name==="AbortError"?"识别超时":"后端无法连接，请检查地址或服务状态"};}
+    finally{clearTimeout(timer);}
+  }
   $("#import-button").addEventListener("click",async()=>{
     const urls=$("#url-input").value.split(/\n|[,;\t ]+/).map(x=>x.trim()).filter(Boolean);
     if(!urls.length){toast("请先粘贴商品链接");return;}
-    const chosen=$("#import-folder").value;let added=0,invalid=0,duplicates=0;
-    for(const raw of urls){
-      const url=validUrl(raw);if(!url){invalid++;continue;}
-      if(state.products.some(p=>p.url===url)){duplicates++;continue;}
-      const host=hostOf(url);
-      state.products.unshift({id:uid(),title:guessTitle(url),url,image:"",price:"",currency:currencyFromUrl(url),store:host,folderId:chosen||autoFolder(url),rating:"",status:"considering",review:"",notes:"",createdAt:Date.now()+added});
-      added++;
-    }
-    $("#url-input").value="";render();await cloudSave();
-    toast(`已添加 ${added} 个链接${invalid?`，忽略无效链接 ${invalid} 个`:""}${duplicates?`，跳过重复链接 ${duplicates} 个`:""}。请编辑补充商品信息。`);
-    if(added===1){const p=state.products[0];openProduct(p);}
+    const chosen=$("#import-folder").value;let added=0,invalid=0,duplicates=0,failed=0;
+    const button=$("#import-button");button.disabled=true;
+    try{
+      for(const raw of urls){
+        const url=validUrl(raw);if(!url){invalid++;continue;}
+        if(state.products.some(p=>p.url===url)){duplicates++;continue;}
+        $("#import-hint").textContent=`正在读取 ${added+failed+1}/${urls.length} 个商品…`;
+        const data=await extractProduct(url);
+        const host=hostOf(url);
+        const title=data.ok&&data.title?data.title:guessTitle(url);
+        const folder=chosen||autoFolder(url,`${title} ${data.category||""} ${data.description||""}`);
+        state.products.unshift({id:uid(),title,url,image:data.ok&&validUrl(data.image||"")||"",price:data.ok&&data.price!=null?data.price:"",currency:data.currency||currencyFromUrl(url),store:data.store||host,folderId:folder,rating:"",status:"considering",review:"",notes:data.ok?"":`自动识别未成功：${data.error||"网页没有提供可读取的商品信息"}`,createdAt:Date.now()+added});
+        if(!data.ok)failed++;
+        added++;render();saveLocal();
+      }
+      $("#url-input").value="";await cloudSave();
+      toast(`已收藏 ${added} 个商品${failed?`，其中 ${failed} 个待补充信息`:""}${duplicates?`，跳过重复 ${duplicates} 个`:""}${invalid?`，无效链接 ${invalid} 个`:""}`);
+    }finally{button.disabled=false;$("#import-hint").textContent="粘贴链接后自动读取；无法读取时保留链接供补充";}
   });
   $("#product-form").addEventListener("submit",async(e)=>{
     e.preventDefault();const id=$("#product-id").value;const url=validUrl($("#p-url").value.trim());if(!url){toast("请填写有效的 http/https 商品链接");return;}
