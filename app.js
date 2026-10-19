@@ -16,7 +16,7 @@
   let supabase = null, session = null, cloudEnabled = false, currentView = "all", activeFolder = "";
   let toastTimer;
   let pendingImage="";
-  function updateImagePreview(){const el=$("#p-image-preview");el.src=pendingImage||"";el.style.display=pendingImage?"block":"none";}
+  function updateImagePreview(){const el=$("#p-image-preview");el.src=pendingImage||"";el.style.display=pendingImage?"block":"none";$("#p-image-status").textContent=pendingImage?"✓ 图片已准备好，点击底部保存修改":"尚未选择图片";}
   function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error("无法读取图片"));reader.onload=()=>{const img=new Image();img.onerror=()=>reject(Error("图片格式不支持"));img.onload=()=>{const scale=Math.min(1,1000/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL("image/jpeg",0.72));};img.src=reader.result;};reader.readAsDataURL(file);});}
   function safeImage(v){return /^data:image\/jpeg;base64,[a-z0-9+/=]+$/i.test(v)?v:validUrl(v)||"";}
 
@@ -24,7 +24,7 @@
     try { const x = JSON.parse(localStorage.getItem(STORAGE_KEY)); if(x && Array.isArray(x.products) && Array.isArray(x.folders)) return x; } catch(e){}
     return {folders:structuredClone(defaultFolders), products:[]};
   }
-  function saveLocal(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  function saveLocal(){try{localStorage.setItem(STORAGE_KEY, JSON.stringify(state));return true;}catch(e){console.error(e);toast("保存失败：浏览器存储空间不足，请尝试较小图片");return false;}}
   function toast(msg){ const el=$("#toast"); el.textContent=msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2800); }
   function esc(s=""){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function validUrl(raw){ try{const u=new URL(raw);return ["http:","https:"].includes(u.protocol)?u.href:null}catch(e){return null} }
@@ -192,13 +192,14 @@
       toast(`已收藏 ${added} 个商品${failed?`，其中 ${failed} 个待补充信息`:""}${duplicates?`，跳过重复 ${duplicates} 个`:""}${invalid?`，无效链接 ${invalid} 个`:""}`);
     }finally{button.disabled=false;$("#import-hint").textContent="粘贴链接后自动读取；无法读取时保留链接供补充";}
   });
-  $("#p-image-file").addEventListener("change",async(e)=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith("image/")){toast("请选择图片文件");return;}if(file.size>15*1024*1024){toast("图片超过15MB，请换一张");return;}try{pendingImage=await compressImage(file);$("#p-image").value="";updateImagePreview();toast("图片已选好，点击保存修改即可");}catch(err){toast(err.message||"图片读取失败");}});
+  $("#p-image-file").addEventListener("change",async(e)=>{const file=e.target.files?.[0];if(!file)return;$("#p-image-status").textContent="正在读取 "+file.name+" …";if(!file.type.startsWith("image/")&&!/\.(jpg|jpeg|png|webp|heic|heif)$/i.test(file.name)){$("#p-image-status").textContent="请选择照片文件";return;}if(file.size>15*1024*1024){$("#p-image-status").textContent="图片超过15MB，请换一张";return;}try{pendingImage=await compressImage(file);$("#p-image").value="";updateImagePreview();toast("图片已准备好，请点击保存修改");}catch(err){console.error(err);$("#p-image-status").textContent="图片读取失败："+(err.message||"请换成 JPG/PNG 图片");toast("图片读取失败，请尝试 JPG/PNG 照片");}});
   $("#p-image").addEventListener("input",()=>{pendingImage=safeImage($("#p-image").value.trim());updateImagePreview();});
   $("#p-image-clear").addEventListener("click",()=>{pendingImage="";$("#p-image").value="";$("#p-image-file").value="";updateImagePreview();});
   $("#product-form").addEventListener("submit",async(e)=>{
     e.preventDefault();const id=$("#product-id").value;const url=validUrl($("#p-url").value.trim());if(!url){toast("请填写有效的 http/https 商品链接");return;}
     const p={id:id||uid(),title:$("#p-title").value.trim()||guessTitle(url),price:$("#p-price").value,currency:$("#p-currency").value,store:$("#p-store").value.trim(),folderId:$("#p-folder").value,url,image:safeImage($("#p-image").value.trim())||pendingImage,rating:$("#p-rating").value,status:$("#p-status").value,review:$("#p-review").value.trim(),notes:$("#p-notes").value.trim(),createdAt:id?(state.products.find(x=>x.id===id)?.createdAt||Date.now()):Date.now()};
     const i=state.products.findIndex(x=>x.id===id);if(i>=0)state.products[i]=p;else state.products.unshift(p);
+    if(!saveLocal()){toast("未保存成功，请换小一点的照片");return;}
     $("#product-dialog").close();render();await cloudSave();toast("商品信息已保存");
   });
   $("#delete-product").addEventListener("click",async()=>{const id=$("#product-id").value;if(!id)return;if(!confirm("确定删除这个商品吗？"))return;state.products=state.products.filter(p=>p.id!==id);$("#product-dialog").close();render();await cloudSave();toast("商品已删除");});
