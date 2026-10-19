@@ -15,6 +15,10 @@
   let state = loadLocal();
   let supabase = null, session = null, cloudEnabled = false, currentView = "all", activeFolder = "";
   let toastTimer;
+  let pendingImage="";
+  function updateImagePreview(){const el=$("#p-image-preview");el.src=pendingImage||"";el.style.display=pendingImage?"block":"none";}
+  function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(Error("无法读取图片"));reader.onload=()=>{const img=new Image();img.onerror=()=>reject(Error("图片格式不支持"));img.onload=()=>{const scale=Math.min(1,1000/Math.max(img.width,img.height));const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL("image/jpeg",0.72));};img.src=reader.result;};reader.readAsDataURL(file);});}
+  function safeImage(v){return /^data:image\/jpeg;base64,[a-z0-9+/=]+$/i.test(v)?v:validUrl(v)||"";}
 
   function loadLocal(){
     try { const x = JSON.parse(localStorage.getItem(STORAGE_KEY)); if(x && Array.isArray(x.products) && Array.isArray(x.folders)) return x; } catch(e){}
@@ -83,7 +87,10 @@
     $("#p-store").value=p?.store||"";
     $("#p-folder").value=p?.folderId||"";
     $("#p-url").value=p?.url||"";
-    $("#p-image").value=p?.image||"";
+    $("#p-image").value=p?.image?.startsWith("data:")?"":p?.image||"";
+    pendingImage=p?.image||"";
+    $("#p-image-file").value="";
+    updateImagePreview();
     $("#p-rating").value=p?.rating||"";
     $("#p-status").value=p?.status||"considering";
     $("#p-review").value=p?.review||"";
@@ -185,9 +192,12 @@
       toast(`已收藏 ${added} 个商品${failed?`，其中 ${failed} 个待补充信息`:""}${duplicates?`，跳过重复 ${duplicates} 个`:""}${invalid?`，无效链接 ${invalid} 个`:""}`);
     }finally{button.disabled=false;$("#import-hint").textContent="粘贴链接后自动读取；无法读取时保留链接供补充";}
   });
+  $("#p-image-file").addEventListener("change",async(e)=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith("image/")){toast("请选择图片文件");return;}if(file.size>15*1024*1024){toast("图片超过15MB，请换一张");return;}try{pendingImage=await compressImage(file);$("#p-image").value="";updateImagePreview();toast("图片已选好，点击保存修改即可");}catch(err){toast(err.message||"图片读取失败");}});
+  $("#p-image").addEventListener("input",()=>{pendingImage=safeImage($("#p-image").value.trim());updateImagePreview();});
+  $("#p-image-clear").addEventListener("click",()=>{pendingImage="";$("#p-image").value="";$("#p-image-file").value="";updateImagePreview();});
   $("#product-form").addEventListener("submit",async(e)=>{
     e.preventDefault();const id=$("#product-id").value;const url=validUrl($("#p-url").value.trim());if(!url){toast("请填写有效的 http/https 商品链接");return;}
-    const p={id:id||uid(),title:$("#p-title").value.trim()||guessTitle(url),price:$("#p-price").value,currency:$("#p-currency").value,store:$("#p-store").value.trim(),folderId:$("#p-folder").value,url,image:validUrl($("#p-image").value.trim())||"",rating:$("#p-rating").value,status:$("#p-status").value,review:$("#p-review").value.trim(),notes:$("#p-notes").value.trim(),createdAt:id?(state.products.find(x=>x.id===id)?.createdAt||Date.now()):Date.now()};
+    const p={id:id||uid(),title:$("#p-title").value.trim()||guessTitle(url),price:$("#p-price").value,currency:$("#p-currency").value,store:$("#p-store").value.trim(),folderId:$("#p-folder").value,url,image:safeImage($("#p-image").value.trim())||pendingImage,rating:$("#p-rating").value,status:$("#p-status").value,review:$("#p-review").value.trim(),notes:$("#p-notes").value.trim(),createdAt:id?(state.products.find(x=>x.id===id)?.createdAt||Date.now()):Date.now()};
     const i=state.products.findIndex(x=>x.id===id);if(i>=0)state.products[i]=p;else state.products.unshift(p);
     $("#product-dialog").close();render();await cloudSave();toast("商品信息已保存");
   });
