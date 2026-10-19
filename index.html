@@ -36,7 +36,7 @@
       <section class="welcome">
         <div class="eyebrow">SAVE IT BEFORE YOU FORGET IT</div>
         <h1>把心动好物，<em>好好收藏。</em></h1>
-        <p>一次粘贴多个商品链接，慢慢整理成自己的购物灵感库。</p>
+        <p>粘贴商品链接，自动读取商品信息并整理进你的收藏库。</p>
       </section>
 
       <section class="import-card">
@@ -46,7 +46,7 @@
           <label class="select-label">放入合集
             <select id="import-folder"><option value="">自动分类 / 待整理</option></select>
           </label>
-          <div class="action-right"><span id="import-hint" class="muted small">自动分类会根据网址和标题给出建议</span><button id="import-button" class="primary-button">＋ 导入链接</button></div>
+          <div class="action-right"><span id="import-hint" class="muted small">连接后端后自动读取商品图片、名称、价格和分类</span><button id="import-button" class="primary-button">＋ 导入链接</button></div>
         </div>
       </section>
 
@@ -101,6 +101,8 @@
     <form id="settings-form" method="dialog">
       <div class="dialog-head"><div><div class="eyebrow">SETTINGS</div><h2>设置与云端同步</h2></div><button type="button" class="icon-button" data-close="settings-dialog">×</button></div>
       <p class="muted">默认使用当前浏览器保存。连接 Supabase 后，可登录并在多台设备同步数据。</p>
+      <label class="field">商品识别服务 URL（Render 后端）<input id="extractor-url" type="url" placeholder="https://your-service.onrender.com"></label>
+      <button type="button" id="save-extractor" class="secondary-button">保存商品识别服务地址</button>
       <label class="field">Supabase Project URL<input id="supabase-url" type="url" placeholder="https://xxxx.supabase.co"></label>
       <label class="field">Supabase anon / publishable key<input id="supabase-key" type="password" placeholder="公开客户端密钥，不是 service_role"></label>
       <label class="field">你的管理员邮箱<input id="admin-email" type="email" placeholder="创建 Supabase Auth 用户时使用的邮箱"></label>
